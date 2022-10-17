@@ -1,0 +1,293 @@
+// Code to generate arbitrary geodesic polyhedra.
+// Following https://mathematica.stackexchange.com/a/257061
+// Chaitanya Joshi (www.chaitanyajoshi.info)
+
+import meshtools 
+import "tools.morpho"
+import optimize 
+import functionals
+import vtk 
+
+class GD {
+
+    init(m, n, verbose=true, triangulate=true) {
+        
+        self.verbose = verbose
+        self.triangulate = triangulate
+        self.m = m
+        self.n = n
+
+        self._populateVertices(m,n)
+        if (triangulate) self._triangulate()
+        else self._pointCloud()
+    }
+    
+    // This method returns the final (m,n) mesh
+    mesh() {
+        return self.geo
+    }
+
+    // This method exports the mesh in the Morpho .mesh format
+    export() {
+        self.geo.save("GD_${self.m}_${self.n}.mesh")
+    }
+    
+    // This method exports the mesh in the .vtk format
+    exportvtk() {
+        VTKExporter(self.geo).export("GD_${self.m}_${self.n}.vtk")
+    }
+    
+    // This method plots the coordination number field on the mesh
+    plotCoordNum() {
+
+        // triangulate the mesh if not already triangulated
+        if (!self.triangulate) {
+            print "Triangulating the mesh..."
+            self.triangulate = true 
+            self._triangulate()
+        }
+        self.coordNum = coordNum(self.geo)
+        Show(plotfield(self.coordNum, style="interpolate",scalebar=ScaleBar(posn=[1.5,0,0])))
+    
+    }
+
+    // Function to minimize the Thomson potential on resulting mesh
+    minimizeThomson() {
+        // Specify the problem
+        if (self.verbose) print "Minimizing the Thomson potential..."
+        self.problem = OptimizationProblem(self.geo)
+
+        // The particle repel one another by a Coulomb potential.
+        // We supply the potential and it's derivative wrt r as anonymous functions.
+        self.lv = PairwisePotential(fn (r) 1/r, fn (r) -1/r^2)
+        self.problem.addenergy(self.lv)
+
+        // Constrain the particles on the unit sphere via a level set constraint.
+        // The level set function and its gradient are supplied as anonymous functions.
+        self.lsph = ScalarPotential(fn (x,y,z) x^2+y^2+z^2-1, fn (x,y,z) Matrix([2*x, 2*y, 2*z]))
+        self.problem.addlocalconstraint(self.lsph)
+
+        // Set up the optimizer to optimize this problem wrt the mesh vertex positions.
+        self.opt = ShapeOptimizer(self.problem, self.geo)
+
+        // Choose a stepsize
+        self.opt.stepsize=0.01/sqrt(self.geo.count())
+        if (!self.verbose) self.opt.quiet = true
+        // Do a few iterations at fixed stepsize to move away from the initally random
+        // condition. [This helps condition the problem]
+        self.opt.relax(5)
+
+        // Now perform gradient descent
+        self.opt.conjugategradient(100*self.geo.count()) // Perform direct gradient descent
+
+    }
+
+    // Function to visualize the Thomson potential on resulting mesh
+    plotThomsonPotential(export = false) {
+
+        self.lv = PairwisePotential(fn (r) 1/r, fn (r) -1/r^2)
+        var e = self.lv.integrand(self.geo)
+        self.thomson = Field(self.geo, 1.0)
+        for (i in 0...self.geo.count(0)) {
+            self.thomson[i] = e[i]
+        }
+
+        var g = plotfield(self.thomson, style="interpolate", colormap=ViridisMap(), scalebar=ScaleBar(posn=[1.2,0,0]))
+        g.title = "Thomson potential for a (${self.m},${self.n}) lattice"
+        g.display(Text("${g.title}", [-1,1.1,0]))
+        Show(g)
+
+        if (export) {
+            VTKExporter(self.thomson).export("ThomsonPotential.vtk")
+        }
+    }
+
+    /* Internal helper methods begin here*/
+
+    // This method populates the vertices list for a given (m,n) combination
+    _populateVertices(m,n) { 
+
+        self.iv = self._gcd(m,n) - 1 // Number of intervertex points
+
+        self.vertices = []
+
+        self.ico = Mesh("icosahedron.mesh")
+
+        // Add all the base vertices of the icosahedron
+        if (self.verbose) print "Adding base icosahedron vertices..."
+        for (i in 0...self.ico.count(0)) {
+            self.vertices.append(self.ico.vertexposition(i))
+        }
+
+        // If intervertices are present, add them
+        if (self.iv>0) {
+            if (self.verbose) print "Adding intervertices..."
+            var conn = self.ico.connectivitymatrix(0,1)
+            var ids, p0, p1, split
+            for (i in 0...self.ico.count(1)) {
+                ids = conn.rowindices(i)
+                p0 = self.ico.vertexposition(ids[0])
+                p1 = self.ico.vertexposition(ids[1])
+                split = (p1-p0) / (self.iv+1)
+                for (j in 0...self.iv) {
+                    self.vertices.append(p0 + (j+1)*split)
+                }
+            }
+
+        }
+        if (self.verbose) print "Generating base triangle's interior vertices..."
+        self._generateInterior()
+
+        // Add interior points
+        self.map = Matrix([[m, 0, 0, n, 0, 0], 
+                           [0, m, 0, 0, n, 0], 
+                           [0, 0, m, 0, 0, n], 
+                           [-n, 0, 0, m + n, 0, 0], 
+                           [0, -n, 0, 0, m + n, 0], 
+                           [0, 0, -n, 0, 0, m + n]])
+        var conn = self.ico.connectivitymatrix(0,2)
+        var ids, p0, p1, p2, p10, p20, p, q, orient
+        var uDir = Matrix(3)
+        var vDir = Matrix(3)
+        if (self.verbose) print "Adding interior vertices for each face..."
+        for (i in 0...self.ico.count(2)) {
+            ids = conn.rowindices(i)
+            p0 = self.ico.vertexposition(ids[0])
+            p1 = self.ico.vertexposition(ids[1])
+            p2 = self.ico.vertexposition(ids[2])
+            p10 = p1-p0
+            p20 = p2-p0
+            orient = (self._cross(p20,p10).transpose() * p0)[0]
+            if (orient<0) {
+                p10 = p2-p0 
+                p20 = p1-p0
+            }
+            p = Matrix(6)
+            p[0] = p10[0]
+            p[1] = p10[1]
+            p[2] = p10[2]
+            p[3] = p20[0]
+            p[4] = p20[1]
+            p[5] = p20[2]
+
+            q = p / self.map
+            uDir = q[0..2]
+            vDir = q[3..5]
+
+            self._addInterior(p0, uDir, vDir)
+
+        }
+
+    }
+
+    // This method triangulates the points and generates the mesh
+    _triangulate() {
+
+        // Now that we have all the points, create a 3D Delaunay mesh
+        // and pick out the boundary mesh
+        // First, project all the points on to the unit sphere
+        self.normvert = self.vertices.clone()
+        for (i in 0...self.vertices.count()) {
+            self.normvert[i] = self.vertices[i] / self.vertices[i].norm()
+        }
+        if (self.verbose) print "Creating the 3D Delaunay mesh..."
+        self.m3d = DelaunayMesh(self.normvert)
+        self.m3d.addgrade(1) 
+        self.m3d.addgrade(2) 
+        self.m3d.addgrade(3) 
+
+        self.s = Selection(self.m3d, boundary=true)
+        self.s.addgrade(1)
+        if (self.verbose) print "Generating boundary mesh..."
+        self.geo = meshfromsel(self.s, self.m3d)
+        self.geo.addgrade(1)
+
+    }
+
+    // This method simply produces a point cloud with the vertex
+    // positions of the geodesic polyhedron without producing the
+    // connectivities.
+    _pointCloud() {
+
+        var mb = MeshBuilder()
+        self.normvert = self.vertices.clone()
+        for (i in 0...self.vertices.count()) {
+            self.normvert[i] = self.vertices[i] / self.vertices[i].norm()
+            mb.addvertex(self.normvert[i])
+        }
+
+        self.geo = mb.build()
+    }
+
+    // This method generates a mesh selection with vertices
+    // corresponding to the interior vertives of the primary triangle.
+    _generateInterior() {
+
+        var Oc = self._toCart(0,0)
+        var Ac = self._toCart(self.m, self.n)
+        var Bc = self._toCart(-self.n, self.m+self.n)
+
+        var tol = 0.01 // To make sure we are not selecting any vertex *on* the primary triangle
+        fn selectInterior(x,y,z) {
+            return (y > tol + Oc[1] + (Ac[1]-Oc[1])/(Ac[0]-Oc[0]) * (x - Oc[0])) && (y < -tol + Oc[1] + (Bc[1]-Oc[1])/(Bc[0]-Oc[0]) * (x - Oc[0])) && (y < -tol + Bc[1] + (Ac[1]-Bc[1])/(Ac[0]-Bc[0]) * (x - Bc[0]))
+        }
+
+        var mm = max(self.m, self.n)
+        self.mesh = AreaMesh(fn (u,v) self._toCart(u,v), -mm..2*mm, -mm..2*mm)
+
+        self.interior = Selection(self.mesh, fn(x,y,z) selectInterior(x,y,z))
+
+    }
+
+    // This method takes the vertices of the interior of the primary
+    // triangle and transforms them to a face of the base icosahedron.
+    // This transformation requires the vertex position of one of the
+    // face vertices and the basis vectors corresponding to the two
+    // edges connected to that vertex. These are computed for each
+    // icosahedron face in the _populateVertices method.
+    _addInterior(origin, uDir, vDir) {    
+
+        // Transform a vertex position (in Cartesian coordinates) on the
+        // primary triangle to the face of the icosahedron.
+        fn toIco(v) {
+            // First, convert it to the isovector coordinates
+            var iso = self._toIso(v)
+            // Then, use the basis-isovectors and origin to get the point
+            return origin + iso[0] * uDir + iso[1] * vDir
+        }
+
+        // Add all the points in the selection to our vertex list
+        for (id in self.interior.idlistforgrade(0)) {
+            self.vertices.append(toIco(self.mesh.vertexposition(id)))
+        }
+
+    }
+    
+    // This method takes in isovector coordinates and returns the
+    // corresponding Cartesian coordinates on the primary triangle
+    _toCart(x,y) {
+        return (x * Matrix([1, 0, 0]) + y * Matrix([0.5, sqrt(3)/2, 0]))
+    }
+
+    // This method takes in a Cartesian position vector on the primary
+    // triangle and returns its corresponding isovector coordinates
+    _toIso(v) {
+        var y = v[1] * 2 / sqrt(3)
+        var x = v[0] - y / 2
+        return Matrix([x,y,0])
+    }
+    
+    // Greatest Common Divisor
+    _gcd(a, b) {
+        if (b == 0) return a
+        else return self._gcd(b, mod(a,b))
+    }
+
+    // Cross product of two vectors
+    _cross(a, b) {
+        return Matrix([ a[1]*b[2]-a[2]*b[1],
+                    a[2]*b[0]-a[0]*b[2],
+                    a[0]*b[1]-a[1]*b[0] ])
+    }
+
+}

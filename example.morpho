@@ -1,0 +1,14 @@
+/* In this example script, we will use the geodesic polyhedron module to
+generate a (3,2) lattice on a sphere, minimize the Thomson potential on
+it and plot it */
+
+// Import the module
+import "geodesic.morpho"
+
+var gd = GD(3,2) // Initialize the (3,2) sphere
+
+gd.plotCoordNum()
+
+gd.minimizeThomson() // Minimize the Thomson potential wrt to the vertices
+
+gd.plotThomsonPotential() // Plot the Thomson potential
