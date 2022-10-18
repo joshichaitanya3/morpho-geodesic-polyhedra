@@ -3,7 +3,7 @@ generate a (3,2) lattice on a sphere, minimize the Thomson potential on
 it and plot it */
 
 // Import the module
-import "geodesic.morpho"
+import "gd.morpho"
 
 var gd = GD(3,2) // Initialize the (3,2) sphere
 
