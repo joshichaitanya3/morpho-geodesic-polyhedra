@@ -1,28 +1,24 @@
 # morpho-geodesic-polyhedra
 ## Morpho module to generate arbitrary geodesic polyhedra with frequency (m,n)
 
-This repository provides a small script to generate arbitrary geodesic
-polyhdra with a given frequency `(m,n)`. You will need Morpho installed
-to run the script. You can find instructions for the installation
-[here](https://github.com/Morpho-lang/morpho).
+## Installation and Prerequisites
 
-## Installation
+To install this package, clone this repository onto your computer in any convenient place:
 
-You can get the code by cloning this repository or downloading the
-source code. You can use the module by copying the files
-[gd.morpho](gd.morpho) and [tools.morpho](tools.morpho) in your working directory and importing it in your
-scripts as follows:
+    git clone https://github.com/joshichaitanya3/morpho-geodesic-polyhedra.git
 
-```
-import "gd.morpho"
-```
+then add the location of this repository to your .morphopackages file.
 
-The [tools.morpho](tools.morpho) file is used by the `gd` module and doesn't
-need a separate import.
+    echo PACKAGEPATH >> ~/.morphopackages 
 
-## Usage
+where PACKAGEPATH is the location of the git repository. 
 
-A basic usage example can be found under [example.morpho](example.morpho). 
+## Usage 
+
+A basic usage example can be found under the [examples](./examples) folder. 
+
+Some of its functionality is highlighted here, but full documentation is found under [help](./share/help/gd.md), 
+which is also available as inline help in Morpho upon installation.
 
 ## The `GD` object and its functions
 
@@ -30,19 +26,9 @@ A basic usage example can be found under [example.morpho](example.morpho).
 with two natural numbers, corresponding to the (m,n) values. 
 
 ```
+import gd
 var gd = GD(3,2) // Initialize the (3,2) geodesic polyhedron
 ```
-
-It supports two optional arguments:
-* `verbose` : bool indicating whether the script should print progress. `true` by defualt
-* `triangulate`: bool indicating whether to triangulate the polyhedron
-  vertices. `true` by default. If the connectivity is unnecessary,
-  having this variable be `false` can save time.  
-
-The initialization in the line above determines the vertex positions of
-the (m,n) lattice on a unit sphere and triangulates it if `triangulate`
-is `true`. 
-
 
 The `GD` object has a few useful functions/methods:
 
@@ -55,22 +41,6 @@ polyhedron.
 var mesh = gd.mesh()
 ```
 
-### export
-
-The `export` method saves the mesh in the Morpho `.mesh` format.
-
-```
-gd.export() // Saves the mesh as "GD_3_2.mesh"
-```
-
-### exportvtk
-
-The `exportvtk` method saves the mesh in the Morpho `.vtk` format.
-
-```
-gd.exportvtk() // Saves the mesh as "GD_3_2.vtk"
-```
-
 ### plotCoordNum
 
 The `plotCoordNum` method plots the coordination number field on the
@@ -81,7 +51,7 @@ gd.plotCoordNum()
 ```
 
 ![Plot of the geodesic polyhdron with color showing the coordination
-number of the vertices.](coordNum.png "Coordination Number Plot")
+number of the vertices.](assets/coordNum.png "Coordination Number Plot")
 
 ### minimizeThomson
 
@@ -99,4 +69,4 @@ gd.plotThomsonPotential()
 ```
 
 ![Plot of the geodesic polyhdron with color showing the Thomson
-potential value.](thomson.png "Thomson potential")
+potential value.](assets/thomson.png "Thomson potential")

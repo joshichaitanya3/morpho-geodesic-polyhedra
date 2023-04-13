@@ -3,10 +3,82 @@
 // Chaitanya Joshi (www.chaitanyajoshi.info)
 
 import meshtools 
-import "tools.morpho"
 import optimize 
 import functionals
 import vtk 
+import plot 
+
+// Function to build a mesh from a selection. 
+fn meshfromsel(s, m, field=nil) {
+
+    var mb = MeshBuilder()
+    var d = Dictionary()
+    var id0
+
+    for (id in s.idlistforgrade(0)) {
+        id0 = mb.addvertex(m.vertexposition(id))
+        d[id] = id0
+
+    }
+
+    var conn = m.connectivitymatrix(0,1)
+    var id1
+
+    for (id in s.idlistforgrade(1)) {
+        id1 = conn.rowindices(id)
+        mb.addedge([d[id1[0]], d[id1[1]]]) 
+    }
+
+    var conn = m.connectivitymatrix(0,2)
+    var id2
+
+    for (id in s.idlistforgrade(2)) {
+        id2 = conn.rowindices(id)
+        mb.addface([d[id2[0]], d[id2[1]], d[id2[2]]]) 
+    }
+
+    var conn = m.connectivitymatrix(0,3)
+    var id3
+
+    for (id in s.idlistforgrade(3)) {
+        id3 = conn.rowindices(id)
+        mb.addvolume([d[id3[0]], d[id3[1]], d[id3[2]], d[id3[3]]]) 
+    }
+
+    var newmesh = mb.build()
+    if (isnil(field)) return newmesh
+
+    if (!isfield(field)) Error("NotAField", "The optional argument `field` has to be a Morpho Field object").throw()
+
+    var newfield = Field(newmesh, field[0])
+
+    for (id in s.idlistforgrade(0)) {
+        newfield[d[id]] = field[id]
+    }
+    return [newmesh, newfield]
+}
+
+// Function to compute the coordination number of the vertices of a
+// mesh. The coordination number for a given vertex is the number of
+// adjecent vertices connected to it via an edge.
+// This function returns a scalar field defined on the vertices with the
+// values equal to the coordination number.
+
+fn coordNum(m) {
+
+    m.addgrade(1) // Ensure that grade-1 elements are present
+
+    var coordNum = Field(m, 0) // Initialize a field on the vertices to store the coordination numner
+
+    var conn = m.connectivitymatrix(1,0)
+
+    for (i in 0...m.count(0)) {
+        coordNum[i] = conn.rowindices(i).count()
+    }
+
+    return coordNum
+
+}
 
 class GD {
 
@@ -111,7 +183,32 @@ class GD {
 
         self.vertices = []
 
-        self.ico = Mesh("icosahedron.mesh")
+        var icovertices = []
+        var gr = (1 + sqrt(5))/2 // Golden ratio
+        
+        icovertices.append(Matrix([0, 1, gr]) )
+        icovertices.append(Matrix([0, -1, gr]) )
+        icovertices.append(Matrix([0, -1, -gr]))
+        icovertices.append(Matrix([0, 1, -gr]))
+        icovertices.append(Matrix([1, gr, 0]))
+        icovertices.append(Matrix([-1, gr, 0]))
+        icovertices.append(Matrix([-1, -gr, 0]))
+        icovertices.append(Matrix([1, -gr, 0]))
+        icovertices.append(Matrix([gr, 0, 1]))
+        icovertices.append(Matrix([-gr, 0, 1]))
+        icovertices.append(Matrix([-gr, 0, -1]))
+        icovertices.append(Matrix([gr, 0, -1]))
+
+        var ico3D = DelaunayMesh(icovertices)
+        ico3D.addgrade(1) 
+        ico3D.addgrade(2) 
+        ico3D.addgrade(3) 
+        var icoS = Selection(ico3D, boundary=true)
+        icoS.addgrade(1)
+        self.ico = meshfromsel(icoS, ico3D)
+        self.ico.addgrade(1)
+
+        // self.ico = Mesh("icosahedron.mesh")
 
         // Add all the base vertices of the icosahedron
         if (self.verbose) print "Adding base icosahedron vertices..."
