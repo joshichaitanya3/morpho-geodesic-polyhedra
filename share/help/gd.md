@@ -14,7 +14,8 @@ with two natural numbers, corresponding to the (m,n) values.
 var gd = GD(3,2) // Initialize the (3,2) geodesic polyhedron
 ```
 
-It supports two optional arguments:
+It supports 3 optional arguments:
+* `r` : float indicating the radius of the base sphere. Default is 1.
 * `verbose` : bool indicating whether the script should print progress. `true` by defualt
 * `triangulate`: bool indicating whether to triangulate the polyhedron
   vertices. `true` by default. If the connectivity is unnecessary,

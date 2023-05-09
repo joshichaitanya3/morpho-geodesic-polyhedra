@@ -82,7 +82,11 @@ fn coordNum(m) {
 
 class GD {
 
-    init(m, n, verbose=true, triangulate=true) {
+    init(m, n, r=1, verbose=true, triangulate=true) {
+        
+        var err = Error("InvalidArgs", "The optional argument `r` needs to be a positive real number")
+        if (!isnumber(r)) err.throw()
+        if (r<=0) err.throw()
         
         self.verbose = verbose
         self.triangulate = triangulate
@@ -92,6 +96,11 @@ class GD {
         self._populateVertices(m,n)
         if (triangulate) self._triangulate()
         else self._pointCloud()
+
+        if (r!=1) {
+            var vert = self.geo.vertexmatrix()
+            self.geo.setvertexmatrix(r*vert)
+        }
     }
     
     // This method returns the final (m,n) mesh
