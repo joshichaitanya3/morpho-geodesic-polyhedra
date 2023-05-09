@@ -9,9 +9,14 @@ To install this package, clone this repository onto your computer in any conveni
 
 then add the location of this repository to your .morphopackages file.
 
-    echo PACKAGEPATH >> ~/.morphopackages 
+    cd morpho-geodesic-polyhedra
+    pwd >> ~/.morphopackages 
 
 where PACKAGEPATH is the location of the git repository. 
+
+To update the module to the latest version, navigate into the directory and run
+
+    git pull
 
 ## Usage 
 
